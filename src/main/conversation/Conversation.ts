@@ -92,7 +92,15 @@ export class Conversation {
         }
         
         try {
-            this.gameData = await parseLog(ck3DebugPath);
+            const parsedData = await parseLog(ck3DebugPath);
+            
+            if (!parsedData || !parsedData.characters) {
+                console.warn('Conversation.initializeGameData: parseLog returned invalid/empty data (log is empty or still writing).');
+                this.isActive = false;
+                return;
+            }
+
+            this.gameData = parsedData;
             console.log('GameData initialized with', this.gameData.characters.size, 'characters');
             this.gameData.loadCharactersSummaries();
             
