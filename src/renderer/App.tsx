@@ -22,8 +22,15 @@ function App() {
   useEffect(() => {
     // Show settings panel on frontend initialization if the setting is enabled
     // Only run this once when appSettings are first loaded
+    console.log('DIAGNOSTIC: Settings effect fired, appSettings:', appSettings?.showSettingsOnStartup, 'showConfig:', showConfig);
     if (appSettings && appSettings.showSettingsOnStartup !== false && !showConfig) {
+      console.log('DIAGNOSTIC: Setting showConfig to true');
       setShowConfig(true);
+    } else {
+      console.log('DIAGNOSTIC: NOT setting showConfig to true, condition:', 
+        'appSettings:', !!appSettings, 
+        'showSettingsOnStartup:', appSettings?.showSettingsOnStartup,
+        '!showConfig:', !showConfig);
     }
   }, [appSettings]); // Only depend on appSettings, not showConfig
 
@@ -102,7 +109,10 @@ function App() {
   }, [showChat]);
 
   return (
-    <div className="App" style={{ display: isOverlayVisible ? 'block' : 'none' }}>
+    <div className="App" style={{ 
+      opacity: isOverlayVisible ? 1 : 0,
+      pointerEvents: isOverlayVisible ? 'auto' : 'none'
+    }}>
       {showChat && <Chat onToggleConfig={toggleConfig} />}
       {showConfig && (
         <ConfigPanel
@@ -117,3 +127,8 @@ function App() {
 };
 
 export default App;
+
+// DIAGNOSTIC: Check initial state
+console.log('DIAGNOSTIC: App component mounted');
+console.log('DIAGNOSTIC: Initial showConfig =', false);
+console.log('DIAGNOSTIC: Initial isOverlayVisible =', true);

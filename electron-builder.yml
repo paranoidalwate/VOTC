@@ -5,6 +5,7 @@ directories:
 asar: false
 files:
   - 'out/**'  # Include the output directory
+  - 'build/**'  # Include build resources (icons, etc.)
   - 'default_userdata/**'  # Include default_userdata directory
   - '!**/.vscode/*'
   - '!src/*'
@@ -19,6 +20,7 @@ files:
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
 asarUnpack:
   - resources/**
+  - build/**
 win:
   executableName: VOTC
   icon: build/icon.ico
@@ -34,8 +36,12 @@ mac:
     - dmg
     - zip
   artifactName: ${name}-${version}-${arch}.${ext}
-appImage:
-  artifactName: ${name}-${version}.${ext}
+linux:
+  target:
+    - AppImage
+  category: Game
+  icon: build/icon.png
+  artifactName: VOTC-${version}.${ext}
 npmRebuild: false
 publish:
   provider: github

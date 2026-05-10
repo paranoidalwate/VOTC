@@ -17,9 +17,18 @@ import { promptConfigManager } from './conversation/PromptConfigManager';
 import { TemplateEngine } from './conversation/TemplateEngine';
 import { appUpdater } from './AutoUpdater';
 import { focusMonitor } from './FocusMonitor';
+import { UnixSocketServer } from './UnixSocketServer';
 import { resolveI18nString } from './actions/i18nUtils';
+
+// Detect Wayland session at module level
+let isWayland: boolean = process.env['XDG_SESSION_TYPE'] === 'wayland' || !!process.env['WAYLAND_DISPLAY'];
 // @ts-ignore
-import appIcon from '../../build/icon.ico?asset';
+// Use .png for Linux, .ico for Windows/macOS
+
+// Module-level variables for Wayland detection
+const appIcon = process.platform === 'linux' 
+  ? require('path').join(__dirname, '../../build/icon.png')
+  : require('path').join(__dirname, '../../build/icon.ico');
 import './llmProviders/OpenRouterProvider';
 import './llmProviders/OpenAICompatibleProvider';
 import './llmProviders/OllamaProvider';
@@ -36,6 +45,7 @@ initLogger();
 // Keep a reference to the config window, managed globally
 let chatWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
+let unixSocketServer: UnixSocketServer | null = null;
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (require('electron-squirrel-startup')) {
@@ -75,36 +85,58 @@ const createWindow = (): BrowserWindow => {
   const { width, height } = primaryDisplay.workAreaSize;
 
   // Create the browser window.
-  const chatWindow = new BrowserWindow({
+  console.log('DIAGNOSTIC: Creating window...');
+  
+  const windowConfig: Electron.BrowserWindowConstructorOptions = {
     width,
     height,
-    show: true, // Start hidden
-    transparent: true, // Enable transparency
-    frame: false, // Remove window frame
-    // alwaysOnTop: true, // Keep window on top
-    // skipTaskbar: true, // Don't show in taskbar
-    fullscreen: true,
+    show: true, // ALWAYS visible on startup
+    transparent: true, // transparency on both X11 and Wayland
+    frame: false,
     thickFrame: false,
     hasShadow: false,
-    resizable: false,
+    resizable: false, // Match original behavior
     roundedCorners: false,
+    // On Wayland, make window non-focusable to allow click-through
+    ...(isWayland ? { focusable: false } : {}),
     webPreferences: {
       partition: 'persist:chat',
-      preload: path.join(__dirname, '../preload/preload.js'), // Adjusted path for Vite output
-      nodeIntegration: false, // Best practice: disable nodeIntegration
-      contextIsolation: true, // Best practice: enable contextIsolation
+      preload: path.join(__dirname, '../preload/preload.js'),
+      nodeIntegration: false,
+      contextIsolation: true,
     },
-  });
+  };
 
-  chatWindow.setIgnoreMouseEvents(true, { forward: true });
+  if (!isWayland) {
+    windowConfig.fullscreen = true;
+  }
+  
+  const chatWindow = new BrowserWindow(windowConfig);
+  
+  if (!isWayland) {
+    chatWindow.setAlwaysOnTop(true, 'screen-saver');
+    chatWindow.setSkipTaskbar(true);
+    chatWindow.setIgnoreMouseEvents(true, { forward: true });
+    console.log('DIAGNOSTIC: X11 mode - fullscreen transparent overlay');
+  } else {
+    console.log('DIAGNOSTIC: Wayland mode - large window with transparency attempt');
+    
+    chatWindow.setIgnoreMouseEvents(true);
+  }
 
   // and load the index.html of the app.
+  console.log('DIAGNOSTIC: Loading renderer...');
 if (!app.isPackaged && process.env['ELECTRON_RENDERER_URL']) {
   chatWindow.loadURL(process.env['ELECTRON_RENDERER_URL']); 
 } else {
+  console.log('DIAGNOSTIC: Loading index.html from', path.join(__dirname, '../renderer/index.html'));
   chatWindow.loadFile(
-    path.join(__dirname, '../renderer/index.html') // see below for prod
-  );
+    path.join(__dirname, '../renderer/index.html')
+  ).then(() => {
+    console.log('DIAGNOSTIC: index.html loaded successfully');
+  }).catch((err) => {
+    console.error('DIAGNOSTIC: Failed to load index.html', err);
+  });
 }
 
   // // Open the DevTools.
@@ -1100,6 +1132,8 @@ const setupFocusMonitoring = (window: BrowserWindow) => {
 };
 
 app.on('ready', () => {
+  console.log('DIAGNOSTIC: app.ready fired!');
+  console.log('DIAGNOSTIC: Platform =', process.platform, '| isWayland =', isWayland);
   console.log(app.getPath('userData'));
   clearLog();
   promptConfigManager.seedDefaults();
@@ -1119,7 +1153,19 @@ app.on('ready', () => {
   actionRegistry.reloadActions().catch(err => console.error('Failed to reload actions on startup:', err));
 
   // Set up focus monitoring for dynamic overlay behavior
-  setupFocusMonitoring(chatWindow);
+  // Skip on Wayland as active-win doesn't work there
+  if (!isWayland) {
+    setupFocusMonitoring(chatWindow);
+  } else {
+    console.log('DIAGNOSTIC: Skipping FocusMonitor on Wayland');
+  }
+
+  // Start Unix socket server for Wayland hotkey support
+  if (process.platform === 'linux') {
+    unixSocketServer = new UnixSocketServer();
+    unixSocketServer.start(chatWindow);
+    console.log('DIAGNOSTIC: UnixSocketServer started for Linux/Wayland hotkey support');
+  }
 
   console.log('Current __dirname:', __dirname);
   console.log('Process resources:', process.resourcesPath);
@@ -1130,7 +1176,7 @@ app.on('ready', () => {
     console.log('Tray created successfully');
   } catch (error) {
     console.error('Error creating tray:', error);
-    return;
+    console.log("Tray failed, continuing without tray...");
   }
 
   const contextMenu = Menu.buildFromTemplate([
@@ -1155,34 +1201,36 @@ app.on('ready', () => {
     }
   ]);
 
-  tray.setToolTip('VOTC Overlay');
-  tray.setContextMenu(contextMenu);
+  if (tray) {
+    tray.setToolTip('VOTC Overlay');
+    tray.setContextMenu(contextMenu);
+  }
 
-  // Create and start clipboard listener
+// Create and start clipboard listener
   const clipboardListener = new ClipboardListener();
   clipboardListener.start();
-  
+
   clipboardListener.on('VOTC:IN', () => {
     console.log('VOTC:IN triggered - showing chat interface');
 
-    // Ensure window exists
-    if (!chatWindow || chatWindow.isDestroyed()) {
-      console.log('Creating new chat window');
-      chatWindow = createWindow();
-    }
-
     conversationManager.createConversation();
 
-    // Show window (it might be hidden) and send events to renderer
-    chatWindow.show();
-    chatWindow.focus();
-    chatWindow.webContents.send('chat-reset'); // This will trigger showChat in App.tsx
+    if (chatWindow && !chatWindow.isDestroyed()) {
+      if (process.platform === 'linux') {
+        chatWindow.setFocusable(true);
+      }
+      chatWindow.show();
+      chatWindow.focus();
+      chatWindow.setAlwaysOnTop(true, 'screen-saver');
+      
+      chatWindow.webContents.send('chat-reset');
+    }
   });
 
   clipboardListener.on('VOTC:EFFECT_ACCEPTED', () => {
     console.log('VOTC:EFFECT_ACCEPTED detected - clearing run file');
     runFileManager.clear();
-  })
+  });
 
   clipboardListener.on('VOTC:LETTER', async () => {
     console.log('VOTC:LETTER detected - generating reply');
@@ -1206,12 +1254,15 @@ app.on('ready', () => {
   ipcMain.on('chat-hide', () => {
     // Send event to renderer to hide both chat and config panels
     if (chatWindow && !chatWindow.isDestroyed()) {
+      if (process.platform === 'linux') {
+        chatWindow.setFocusable(false);
+      }
       chatWindow.webContents.send('chat-hide');
     }
   });
 
   // Register global shortcut for Ctrl+H to toggle minimize
-  const ret = globalShortcut.register('Control+H', () => {
+  const ret = globalShortcut.register('CmdOrCtrl+H', () => {
     if (chatWindow && !chatWindow.isDestroyed() && conversationManager.hasActiveConversation()) {
       console.log('Ctrl+H pressed - toggling minimize');
       // Focus the window before sending the event
@@ -1225,7 +1276,7 @@ app.on('ready', () => {
     console.log('Failed to register Ctrl+H global shortcut');
   }
 
-  const reta = globalShortcut.register('Control+Shift+H', () => {
+  const reta = globalShortcut.register('CmdOrCtrl+Shift+H', () => {
     if (chatWindow && !chatWindow.isDestroyed()) {
       console.log('Ctrl+Shift+H pressed - toggling settings');
       // Focus the window before sending the event
@@ -1240,7 +1291,7 @@ app.on('ready', () => {
   }
 
   // Check if a shortcut is registered
-  console.log('Ctrl+H shortcut registered:', globalShortcut.isRegistered('Control+H'));
+  console.log('Ctrl+H shortcut registered:', globalShortcut.isRegistered('CmdOrCtrl+H'));
 });
 
 app.on('window-all-closed', () => {
@@ -1251,6 +1302,8 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   tray?.destroy();
+  // Stop Unix socket server
+  unixSocketServer?.stop();
   // Stop letter manager log tailing
   letterManager.stopLogTailing();
   // Stop focus monitoring

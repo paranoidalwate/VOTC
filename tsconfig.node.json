@@ -12,9 +12,8 @@
     "noImplicitAny": false,
     "sourceMap": true,
     "resolveJsonModule": true,
-    "typeRoots": ["./node_modules/@types"],
-
-    "baseUrl": ".",
-    "composite": true
+    "typeRoots": ["./node_modules/@types", "./node_modules/@electron-toolkit/tsconfig/node_modules/@types"],
+    "composite": true,
+    "types": ["node"]
   }
 }
