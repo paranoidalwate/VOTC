@@ -97,7 +97,11 @@ export class FocusMonitor extends EventEmitter {
     const processPath = activeWindow.owner.path?.toLowerCase() || '';
     
     // Check if CK3 is focused
-    if (processName.includes('ck3') || processPath.includes('ck3.exe')) {
+    // On Windows, process might be ck3.exe; on Linux/macOS it's just ck3
+    const isCK3 = processName.includes('ck3') || 
+                  processPath.includes('ck3') ||
+                  (process.platform === 'linux' && processName === 'ck3');
+    if (isCK3) {
       return true;
     }
 
@@ -124,7 +128,11 @@ export class FocusMonitor extends EventEmitter {
       // In production, use the product name
       return app.getName();
     } else {
-      // In development, it's electron.exe
+      // In development, check platform
+      // On Windows it's electron.exe, on Linux/macOS it's just electron
+      if (process.platform === 'win32') {
+        return 'electron.exe';
+      }
       return 'electron';
     }
   }
