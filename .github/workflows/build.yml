@@ -11,7 +11,7 @@ jobs:
   build:
     strategy:
       matrix:
-        os: [windows-latest, macos-latest]
+        os: [windows-latest, macos-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
     
     steps:
@@ -41,6 +41,10 @@ jobs:
         if: matrix.os == 'macos-latest'
         run: npm run build:mac
 
+      - name: Build Linux executable
+        if: matrix.os == 'ubuntu-latest'
+        run: npm run build:linux
+
       - name: Upload Windows build artifacts
         if: matrix.os == 'windows-latest'
         uses: actions/upload-artifact@v4
@@ -58,5 +62,14 @@ jobs:
           path: |
             dist/*.dmg
             dist/*.zip
+          retention-days: 7
+          if-no-files-found: warn
+
+      - name: Upload Linux build artifacts
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-build
+          path: dist/*.AppImage
           retention-days: 7
           if-no-files-found: warn
