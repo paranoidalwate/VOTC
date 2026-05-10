@@ -12,9 +12,78 @@ A modern reimplementation of the Voices of the Court mod for Crusader Kings III,
 
 ## Installation
 
+### Linux (AppImage - Recommended for Arch, Ubuntu, Debian, Fedora)
+
+1. Download the latest `.AppImage` file from the [Releases](https://github.com/Voices-of-the-Court/VOTC/releases) page
+2. Make it executable:
+   ```bash
+   chmod +x VOTC-*.AppImage
+   ```
+3. Run the application:
+   ```bash
+   ./VOTC-*.AppImage
+   ```
+
+**Dependencies:**
+- **X11**: Install `xdotool` for window detection
+  - Ubuntu/Debian: `sudo apt install xdotool`
+  - Fedora: `sudo dnf install xdotool`
+  - Arch: `sudo pacman -S xdotool`
+- **Wayland** (Hyprland, Sway, etc.): Install `socat` for hotkey support
+  - Ubuntu/Debian: `sudo apt install socat`
+  - Fedora: `sudo dnf install socat`
+  - Arch: `sudo pacman -S socat`
+
+#### Hotkey Setup for Wayland
+
+On Wayland compositors (Hyprland, Sway, etc.), global keyboard shortcuts don't work due to security restrictions. VOTC provides a Unix socket-based workaround:
+
+1. Locate the helper script in the source code: `src/main/utils/votc-hotkey-helper.sh`
+2. Copy it to your PATH or note its location:
+   ```bash
+   # Example: copy to ~/.local/bin
+   mkdir -p ~/.local/bin
+   cp src/main/utils/votc-hotkey-helper.sh ~/.local/bin/votc-hotkey
+   chmod +x ~/.local/bin/votc-hotkey
+   ```
+
+3. Add keybindings in your compositor config:
+
+   **Hyprland** (`~/.config/hypr/hyprland.conf`):
+   ```ini
+   # Make sure $mainMod is defined (usually at the top of the file)
+   $mainMod = SUPER
+   
+   # Toggle chat overlay (Ctrl+H equivalent)
+   bind = $mainMod, h, exec, votc-hotkey toggle-chat
+   
+   # Toggle settings panel (Ctrl+Shift+H equivalent)
+   bind = $mainMod SHIFT, h, exec, votc-hotkey toggle-settings
+   ```
+
+   **Sway** (`~/.config/sway/config`):
+   ```ini
+   # Toggle chat overlay
+   bindsym $mod+h exec votc-hotkey toggle-chat
+   
+   # Toggle settings panel
+   bindsym $mod+Shift+h exec votc-hotkey toggle-settings
+   ```
+
+> **Note**: On X11, hotkeys work automatically via global shortcuts. On Wayland, you need to configure the above keybindings in your compositor settings.
+
+### Windows
+
 1. Download the latest release from the [Releases](https://github.com/Voices-of-the-Court/VOTC/releases) page
 2. Run the installer
 3. Launch the application (please, wait for some time for initialization)
+4. Press `Ctrl+Shift+H` or click right mouse button on tray icon to open configuration menu.
+
+### macOS
+
+1. Download the latest `.dmg` file from the [Releases](https://github.com/Voices-of-the-Court/VOTC/releases) page
+2. Drag the application to your Applications folder
+3. Launch the application
 4. Press `Ctrl+Shift+H` or click right mouse button on tray icon to open configuration menu.
 
 ## Configuration
@@ -51,7 +120,14 @@ npm run dev
 npm run build
 
 # Create distributable package
+# Windows:
 npm run build:win
+
+# macOS:
+npm run build:mac
+
+# Linux (AppImage):
+npm run build:linux
 ```
 
 ### Project Structure
