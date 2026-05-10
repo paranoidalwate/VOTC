@@ -285,6 +285,11 @@ export class AppUpdater {
   }
 
   public checkForUpdates() {
+    if (process.platform === 'linux') {
+      log.info('Auto-updater disabled on Linux');
+      return;
+    }
+    
     log.info('Checking for updates...');
     // Apply the prerelease setting from user preferences
     autoUpdater.allowPrerelease = settingsRepository.getAllowPrerelease();

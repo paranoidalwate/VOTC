@@ -12,16 +12,33 @@ interface ImportResult {
 
 export async function importLegacySummaries(): Promise<ImportResult> {
   try {
-    // Get the current user's AppData Roaming path
-    const appDataPath = app.getPath('appData');
-    const legacySummariesPath = path.join(appDataPath, 'Voices of the Court', 'votc_data', 'conversation_summaries');
-    const ceSummariesPath = path.join(appDataPath, 'Voices of the Court - Community Edition', 'votc_data', 'conversation_summaries');
+    const legacyPaths: string[] = [];
     
-    // Check if legacy path exists
-    if (!fs.existsSync(legacySummariesPath) && !fs.existsSync(ceSummariesPath)) {
+    // Windows/macOS paths
+    const appDataPath = app.getPath('appData');
+    legacyPaths.push(
+      path.join(appDataPath, 'Voices of the Court', 'votc_data', 'conversation_summaries'),
+      path.join(appDataPath, 'Voices of the Court - Community Edition', 'votc_data', 'conversation_summaries')
+    );
+    
+    // Linux paths
+    if (process.platform === 'linux') {
+      const homeDir = app.getPath('home');
+      // Legacy VOTC on Linux might be in .local/share or .config
+      legacyPaths.push(
+        path.join(homeDir, '.local', 'share', 'Voices of the Court', 'votc_data', 'conversation_summaries'),
+        path.join(homeDir, '.local', 'share', 'Voices of the Court - Community Edition', 'votc_data', 'conversation_summaries'),
+        path.join(appDataPath, 'Voices of the Court', 'votc_data', 'conversation_summaries'),
+        path.join(appDataPath, 'Voices of the Court - Community Edition', 'votc_data', 'conversation_summaries')
+      );
+    }
+    
+    // Check if any legacy path exists
+    const existingPaths = legacyPaths.filter(p => fs.existsSync(p));
+    if (existingPaths.length === 0) {
       return {
         success: false,
-        message: 'Legacy summaries folder not found. Please ensure legay VOTC or Community Edition is installed.',
+        message: 'Legacy summaries folder not found. Please ensure legacy VOTC or Community Edition is installed.',
       };
     }
     
@@ -30,22 +47,21 @@ export async function importLegacySummaries(): Promise<ImportResult> {
       fs.mkdirSync(VOTC_SUMMARIES_DIR, { recursive: true });
     }
     
-    // Copy files with error handling
-    const result = await copyDirectory(legacySummariesPath, VOTC_SUMMARIES_DIR);
-    const resultCE = await copyDirectory(ceSummariesPath, VOTC_SUMMARIES_DIR);
+    // Copy files from all existing legacy paths
+    let totalFilesCopied = 0;
+    const allErrors: string[] = [];
     
-    if (!result.success && !resultCE.success) {
-      return {
-        success: false,
-        message: 'Legacy summaries import failed. Please check the console for details.',
-        errors: [...result.errors, ...resultCE.errors],
-      };
+    for (const legacyPath of existingPaths) {
+      const result = await copyDirectory(legacyPath, VOTC_SUMMARIES_DIR);
+      totalFilesCopied += result.filesCopied;
+      allErrors.push(...result.errors);
     }
+    
     return {
-      success: true,
-      message: (result.success && resultCE.success) ? 'Legacy summaries imported successfully!' : 'Import completed with errors.',
-      filesCopied: result.filesCopied + resultCE.filesCopied,
-      errors: [...result.errors, ...resultCE.errors],
+      success: allErrors.length === 0,
+      message: allErrors.length === 0 ? 'Legacy summaries imported successfully!' : 'Import completed with errors.',
+      filesCopied: totalFilesCopied,
+      errors: allErrors,
     };
   } catch (error) {
     return {

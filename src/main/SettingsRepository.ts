@@ -356,10 +356,19 @@ export class SettingsRepository {
   }
 
   getCK3DebugLogPath(): string | null {
-     const ck3Folder = this.getCK3UserFolderPath();
-     const debugPath = ck3Folder ? path.join(ck3Folder, 'logs', 'debug.log') : null;
-     console.log(`SettingsRepository.getCK3DebugLogPath: ck3Folder=${ck3Folder}, debugPath=${debugPath}`);
-     return debugPath;
+    const ck3Folder = this.getCK3UserFolderPath();
+    if (!ck3Folder) return null;
+    
+    // Normalize path - remove trailing logs/ if present (user may have included it)
+    let normalizedFolder = ck3Folder;
+    if (normalizedFolder.endsWith(path.sep + 'logs') || normalizedFolder.endsWith('/logs')) {
+      normalizedFolder = normalizedFolder.replace(/\/logs\/?$/, '');
+      console.log(`SettingsRepository.getCK3DebugLogPath: Normalized path from ${ck3Folder} to ${normalizedFolder}`);
+    }
+    
+    const debugPath = path.join(normalizedFolder, 'logs', 'debug.log');
+    console.log(`SettingsRepository.getCK3DebugLogPath: ck3Folder=${ck3Folder}, debugPath=${debugPath}`);
+    return debugPath;
   }
 
   setCK3UserFolderPath(path: string | null): void {
